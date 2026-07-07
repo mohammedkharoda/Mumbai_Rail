@@ -1,22 +1,30 @@
 "use client";
 
-import { latLngBounds } from "leaflet";
+import { divIcon, latLngBounds, type DivIcon } from "leaflet";
 import { useEffect, useState } from "react";
-import { CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
+import { timeAgo } from "@/lib/format";
 import { LINE_META, STATIONS } from "@/lib/stations";
 import {
   LINES,
+  REPORT_TYPES,
+  REPORT_TYPE_META,
   SEVERITY_LEVELS,
   SEVERITY_META,
+  type LineFilter,
+  type ReportType,
   type StationSeverity,
+  type TypeFilter,
 } from "@/lib/types";
 
 interface StationMapProps {
   severities: ReadonlyMap<string, StationSeverity>;
   selectedStationId: string | null;
   onSelect: (stationId: string) => void;
+  lineFilter: LineFilter;
+  typeFilter: TypeFilter;
 }
 
 const NETWORK_BOUNDS = latLngBounds(
@@ -29,6 +37,27 @@ const TILE_URL_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{
 const TILE_URL_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+/** A report younger than this gets the highlighted "fresh" pin ring. */
+const FRESH_REPORT_MS = 15 * 60_000;
+
+// Pin icons per report type (html is our emoji only — no user content).
+// Styled via .report-pin in globals.css since divIcon HTML lives outside React.
+function buildPins(fresh: boolean): Record<ReportType, DivIcon> {
+  return Object.fromEntries(
+    REPORT_TYPES.map((t) => [
+      t,
+      divIcon({
+        className: "report-pin-anchor",
+        html: `<div class="report-pin${fresh ? " report-pin--fresh" : ""}">${REPORT_TYPE_META[t].icon}</div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 30],
+      }),
+    ]),
+  ) as Record<ReportType, DivIcon>;
+}
+const PIN_ICONS = buildPins(false);
+const PIN_ICONS_FRESH = buildPins(true);
 
 /** Tracks prefers-color-scheme so tiles and marker hexes follow the theme. */
 function usePrefersDark(): boolean {
@@ -43,6 +72,16 @@ function usePrefersDark(): boolean {
   return dark;
 }
 
+function matchesFilters(
+  stationLineOk: boolean,
+  severity: StationSeverity | undefined,
+  typeFilter: TypeFilter,
+): boolean {
+  if (!stationLineOk) return false;
+  if (typeFilter === "all") return true;
+  return (severity?.counts[typeFilter] ?? 0) > 0;
+}
+
 /**
  * Leaflet map of the network. This module touches `window` at import time, so
  * it must only ever be loaded via next/dynamic with ssr: false.
@@ -53,6 +92,8 @@ export default function StationMap({
   severities,
   selectedStationId,
   onSelect,
+  lineFilter,
+  typeFilter,
 }: StationMapProps) {
   const dark = usePrefersDark();
 
@@ -69,22 +110,36 @@ export default function StationMap({
           attribution={TILE_ATTRIBUTION}
           url={dark ? TILE_URL_DARK : TILE_URL_LIGHT}
         />
+
         {STATIONS.map((station) => {
           const severity = severities.get(station.id);
           const level = severity?.level ?? "clear";
           const selected = station.id === selectedStationId;
           const line = LINE_META[station.line];
+          const lineOk = lineFilter === "all" || station.line === lineFilter;
+          const matches = matchesFilters(lineOk, severity, typeFilter);
           return (
             <CircleMarker
               key={station.id}
               center={[station.lat, station.lng]}
               radius={selected ? 11 : 7}
-              pathOptions={{
-                color: dark ? line.colorDark : line.color,
-                weight: selected ? 3 : 2,
-                fillColor: SEVERITY_META[level].color,
-                fillOpacity: level === "clear" ? 0.55 : 0.95,
-              }}
+              pathOptions={
+                matches
+                  ? {
+                      color: dark ? line.colorDark : line.color,
+                      weight: selected ? 3 : 2,
+                      fillColor: SEVERITY_META[level].color,
+                      fillOpacity: level === "clear" ? 0.55 : 0.95,
+                    }
+                  : {
+                      // Filtered out: stay visible for geography, but recede.
+                      color: dark ? line.colorDark : line.color,
+                      opacity: 0.25,
+                      weight: 1,
+                      fillColor: SEVERITY_META[level].color,
+                      fillOpacity: 0.12,
+                    }
+              }
               eventHandlers={{ click: () => onSelect(station.id) }}
             >
               <Tooltip>
@@ -98,6 +153,43 @@ export default function StationMap({
                   } in the last 6h`}
               </Tooltip>
             </CircleMarker>
+          );
+        })}
+
+        {/* Latest-issue pins: an icon above every station with active reports;
+            hover for the details of the most recent report. */}
+        {STATIONS.map((station) => {
+          const severity = severities.get(station.id);
+          if (!severity || severity.recent.length === 0) return null;
+          const lineOk = lineFilter === "all" || station.line === lineFilter;
+          if (!matchesFilters(lineOk, severity, typeFilter)) return null;
+
+          const latest = severity.recent[0];
+          const pinType = typeFilter === "all" ? latest.type : typeFilter;
+          const fresh = Date.now() - Date.parse(latest.createdAt) < FRESH_REPORT_MS;
+          return (
+            <Marker
+              key={`pin-${station.id}`}
+              position={[station.lat, station.lng]}
+              icon={fresh ? PIN_ICONS_FRESH[pinType] : PIN_ICONS[pinType]}
+              eventHandlers={{ click: () => onSelect(station.id) }}
+            >
+              <Tooltip direction="top" offset={[0, -30]}>
+                <span className="font-semibold">{station.name}</span>
+                <br />
+                Latest: {REPORT_TYPE_META[latest.type].icon}{" "}
+                {REPORT_TYPE_META[latest.type].label} · {timeAgo(latest.createdAt)}
+                {latest.note && (
+                  <>
+                    <br />
+                    <em>&ldquo;{latest.note}&rdquo;</em>
+                  </>
+                )}
+                <br />
+                {SEVERITY_META[severity.level].label} · {severity.reportCount} report
+                {severity.reportCount === 1 ? "" : "s"} in the last 6h
+              </Tooltip>
+            </Marker>
           );
         })}
       </MapContainer>

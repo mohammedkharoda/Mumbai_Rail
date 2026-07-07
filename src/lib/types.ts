@@ -55,6 +55,32 @@ export interface ReportsRollup {
   stations: StationSeverity[];
 }
 
+/** App feedback (about the product itself, not a disruption report). */
+export interface Feedback {
+  id: string;
+  message: string;
+  email?: string;
+  /** ISO 8601 */
+  createdAt: string;
+}
+
+export interface NewsItem {
+  title: string;
+  link: string;
+  source: string;
+  publishedAt: string | null;
+}
+
+/** Shape of GET /api/news. */
+export interface NewsFeed {
+  fetchedAt: string;
+  items: NewsItem[];
+}
+
+/** UI filters shared by the map and the station board. */
+export type TypeFilter = ReportType | "all";
+export type LineFilter = Line | "all";
+
 /** Shape of GET /api/weather. */
 export interface WeatherSnapshot {
   fetchedAt: string;

@@ -1,10 +1,13 @@
+import { timeAgo } from "@/lib/format";
 import { LINE_META, STATIONS_BY_ID } from "@/lib/stations";
 import {
   REPORT_TYPES,
   REPORT_TYPE_META,
   SEVERITY_META,
+  type LineFilter,
   type ReportsRollup,
   type StationSeverity,
+  type TypeFilter,
 } from "@/lib/types";
 
 interface StationBoardProps {
@@ -12,17 +15,11 @@ interface StationBoardProps {
   error: string | null;
   selectedStationId: string | null;
   onSelect: (stationId: string) => void;
+  lineFilter: LineFilter;
+  typeFilter: TypeFilter;
 }
 
 const MAX_ROWS = 12;
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  return `${hrs}h ${mins % 60}m ago`;
-}
 
 function countsSummary(severity: StationSeverity): string {
   return REPORT_TYPES.filter((t) => severity.counts[t] > 0)
@@ -40,7 +37,16 @@ export default function StationBoard({
   error,
   selectedStationId,
   onSelect,
+  lineFilter,
+  typeFilter,
 }: StationBoardProps) {
+  const visible = (rollup?.stations ?? []).filter((severity) => {
+    const station = STATIONS_BY_ID.get(severity.stationId);
+    if (lineFilter !== "all" && station?.line !== lineFilter) return false;
+    if (typeFilter !== "all" && severity.counts[typeFilter] === 0) return false;
+    return true;
+  });
+
   return (
     <section aria-label="Station board">
       <div className="flex items-baseline justify-between gap-2 px-1">
@@ -69,9 +75,15 @@ export default function StationBoard({
         </div>
       )}
 
-      {rollup && rollup.stations.length > 0 && (
+      {rollup && rollup.stations.length > 0 && visible.length === 0 && (
+        <p className="mt-2 rounded-2xl border border-dashed border-hairline bg-surface p-4 text-center text-sm text-ink-3">
+          No stations match the current filters.
+        </p>
+      )}
+
+      {visible.length > 0 && (
         <ul className="mt-2 space-y-2">
-          {rollup.stations.slice(0, MAX_ROWS).map((severity) => {
+          {visible.slice(0, MAX_ROWS).map((severity) => {
             const station = STATIONS_BY_ID.get(severity.stationId);
             const line = station ? LINE_META[station.line] : null;
             const levelMeta = SEVERITY_META[severity.level];
@@ -136,10 +148,10 @@ export default function StationBoard({
         </ul>
       )}
 
-      {rollup && rollup.stations.length > MAX_ROWS && (
+      {visible.length > MAX_ROWS && (
         <p className="mt-2 text-xs text-ink-3">
-          …and {rollup.stations.length - MAX_ROWS} more affected station
-          {rollup.stations.length - MAX_ROWS === 1 ? "" : "s"}.
+          …and {visible.length - MAX_ROWS} more affected station
+          {visible.length - MAX_ROWS === 1 ? "" : "s"}.
         </p>
       )}
     </section>

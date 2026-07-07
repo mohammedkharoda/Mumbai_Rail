@@ -4,7 +4,13 @@ import path from "node:path";
 
 import { neon } from "@neondatabase/serverless";
 
-import type { Report, ReportType, SeverityLevel, StationSeverity } from "./types";
+import type {
+  Feedback,
+  Report,
+  ReportType,
+  SeverityLevel,
+  StationSeverity,
+} from "./types";
 import { REPORT_TYPES } from "./types";
 
 /*
@@ -25,6 +31,10 @@ const DECAY_WINDOW_MS = 6 * 60 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 2 * 60 * 1000;
 
 const RECENT_REPORTS_CAP = 3;
+
+/** Sentinel "station" for feedback rate-limit rows — real station ids are
+ *  kebab-case names, so this can never collide. */
+const FEEDBACK_RATE_KEY = "__feedback__";
 
 /** How strongly each report type pushes a station's severity score. */
 const TYPE_WEIGHTS: Record<ReportType, number> = {
@@ -62,6 +72,28 @@ export async function addReport(input: NewReportInput, ip: string): Promise<AddR
 export async function getRollup(): Promise<StationSeverity[]> {
   const url = process.env.DATABASE_URL;
   return url ? neonGetRollup(url) : fileGetRollup();
+}
+
+export interface NewFeedbackInput {
+  message: string;
+  email?: string;
+}
+
+export type AddFeedbackResult =
+  | { ok: true }
+  | { ok: false; reason: "rate-limited"; retryAfterSec: number };
+
+/**
+ * Store app feedback (same per-IP rate window as reports). There is no read
+ * API for feedback in v1 — the owner reads it straight from the `feedback`
+ * table (or data/feedback.json locally).
+ */
+export async function addFeedback(
+  input: NewFeedbackInput,
+  ip: string,
+): Promise<AddFeedbackResult> {
+  const url = process.env.DATABASE_URL;
+  return url ? neonAddFeedback(url, input, ip) : fileAddFeedback(input, ip);
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,6 +200,12 @@ function ensureSchema(sql: NeonSql): Promise<void> {
       last_accepted_at timestamptz NOT NULL,
       PRIMARY KEY (ip, station_id)
     )`;
+    await sql`CREATE TABLE IF NOT EXISTS feedback (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      message text NOT NULL,
+      email text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`;
   })().catch((err: unknown) => {
     schemaReady = null; // let the next request retry
     throw err;
@@ -216,14 +254,7 @@ async function neonAddReport(
   `) as ReportRow[];
 
   if (inserted.length === 0) {
-    const rows = (await sql`
-      SELECT ceil(extract(epoch from
-        last_accepted_at + make_interval(secs => ${windowSec}) - now()
-      )) AS retry_sec
-      FROM report_rate_limits
-      WHERE ip = ${ip} AND station_id = ${input.stationId}
-    `) as { retry_sec: string | number }[];
-    const retryAfterSec = Math.max(1, Number(rows[0]?.retry_sec ?? windowSec));
+    const retryAfterSec = await rateLimitRetryAfter(sql, ip, input.stationId, windowSec);
     return { ok: false, reason: "rate-limited", retryAfterSec };
   }
 
@@ -237,6 +268,54 @@ async function neonAddReport(
   ]);
 
   return { ok: true, report: rowToReport(inserted[0]) };
+}
+
+/** Seconds until the (ip, key) rate-limit row expires. */
+async function rateLimitRetryAfter(
+  sql: NeonSql,
+  ip: string,
+  key: string,
+  windowSec: number,
+): Promise<number> {
+  const rows = (await sql`
+    SELECT ceil(extract(epoch from
+      last_accepted_at + make_interval(secs => ${windowSec}) - now()
+    )) AS retry_sec
+    FROM report_rate_limits
+    WHERE ip = ${ip} AND station_id = ${key}
+  `) as { retry_sec: string | number }[];
+  return Math.max(1, Number(rows[0]?.retry_sec ?? windowSec));
+}
+
+async function neonAddFeedback(
+  url: string,
+  input: NewFeedbackInput,
+  ip: string,
+): Promise<AddFeedbackResult> {
+  const sql = db(url);
+  await ensureSchema(sql);
+  const windowSec = RATE_LIMIT_WINDOW_MS / 1000;
+
+  // Same atomic gate pattern as reports, keyed on the feedback sentinel.
+  const inserted = (await sql`
+    WITH gate AS (
+      INSERT INTO report_rate_limits (ip, station_id, last_accepted_at)
+      VALUES (${ip}, ${FEEDBACK_RATE_KEY}, now())
+      ON CONFLICT (ip, station_id) DO UPDATE SET last_accepted_at = now()
+      WHERE report_rate_limits.last_accepted_at <= now() - make_interval(secs => ${windowSec})
+      RETURNING 1
+    )
+    INSERT INTO feedback (message, email)
+    SELECT ${input.message}, ${input.email ?? null}
+    FROM gate
+    RETURNING id
+  `) as { id: string }[];
+
+  if (inserted.length === 0) {
+    const retryAfterSec = await rateLimitRetryAfter(sql, ip, FEEDBACK_RATE_KEY, windowSec);
+    return { ok: false, reason: "rate-limited", retryAfterSec };
+  }
+  return { ok: true };
 }
 
 async function neonGetRollup(url: string): Promise<StationSeverity[]> {
@@ -358,4 +437,46 @@ async function fileGetRollup(): Promise<StationSeverity[]> {
   const now = Date.now();
   prune(s, now);
   return rollupFromReports(s.reports, now);
+}
+
+const FEEDBACK_FILE = path.join(DATA_DIR, "feedback.json");
+
+async function fileAddFeedback(
+  input: NewFeedbackInput,
+  ip: string,
+): Promise<AddFeedbackResult> {
+  const s = await ensureLoaded();
+  const now = Date.now();
+  prune(s, now);
+
+  const key = `${ip}|${FEEDBACK_RATE_KEY}`;
+  const last = s.lastAcceptedAt.get(key);
+  if (last !== undefined && now - last < RATE_LIMIT_WINDOW_MS) {
+    const retryAfterSec = Math.ceil((RATE_LIMIT_WINDOW_MS - (now - last)) / 1000);
+    return { ok: false, reason: "rate-limited", retryAfterSec };
+  }
+
+  const entry: Feedback = {
+    id: randomUUID(),
+    message: input.message,
+    ...(input.email ? { email: input.email } : {}),
+    createdAt: new Date(now).toISOString(),
+  };
+  s.lastAcceptedAt.set(key, now);
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    let existing: unknown = [];
+    try {
+      existing = JSON.parse(await fs.readFile(FEEDBACK_FILE, "utf8"));
+    } catch {
+      // Missing or corrupt file → start a fresh list.
+    }
+    const list = Array.isArray(existing) ? existing : [];
+    list.push(entry);
+    await fs.writeFile(FEEDBACK_FILE, JSON.stringify(list, null, 2), "utf8");
+  } catch (err) {
+    // Read-only filesystem → feedback is lost. Set DATABASE_URL in production.
+    console.warn("store: could not persist feedback to disk", err);
+  }
+  return { ok: true };
 }

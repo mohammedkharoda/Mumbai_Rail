@@ -64,6 +64,30 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Report pins on the map — Leaflet divIcon HTML renders outside React, so
+   these are styled here rather than with Tailwind classes. */
+.report-pin-anchor {
+  background: transparent;
+  border: none;
+}
+.report-pin {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  line-height: 1;
+}
+/* Reports under 15 minutes old get a highlight ring (the "latest" marker). */
+.report-pin--fresh {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Honor reduced-motion globally (Leaflet zoom/pan animations included). */
 @media (prefers-reduced-motion: reduce) {
   *,

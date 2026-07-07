@@ -27,9 +27,13 @@ collective knowledge one shared, live map.
 ## Features
 
 - 🗺️ **Live station map** — 59 stations across the Western, Central, Harbour
-  and Trans-Harbour lines, color-coded by crowd-reported severity
+  and Trans-Harbour lines, color-coded by crowd-reported severity, with an
+  icon pin over each affected station (hover for the latest report's details)
 - 📢 **One-tap reporting** — waterlogging, cancellations, delays, crowding, or
   the all-important *all clear*
+- 🔍 **Filters** — narrow the map and board by line or by issue type
+- 📰 **Railway headlines** — recent Mumbai train news via Google News RSS
+- 💬 **Feedback form** — in-app feedback, stored alongside reports
 - ⏳ **Self-cleaning severity scores** — each report's influence decays
   linearly over 6 hours, so stale reports fade out without any cleanup job
 - 🌧️ **Monsoon weather banner** — live Mumbai rainfall + wind from Open-Meteo,
@@ -73,6 +77,8 @@ not an official warning:
 | `/api/reports` | `GET`  | Severity rollup for stations with active reports, worst-first  |
 | `/api/reports` | `POST` | Submit `{ stationId, type, note? }` → `201` / `400` / `429`    |
 | `/api/weather` | `GET`  | Live rainfall/wind + derived alert level (upstream cached 5m)  |
+| `/api/news`    | `GET`  | Mumbai railway headlines (Google News RSS, cached 30m)         |
+| `/api/feedback`| `POST` | App feedback — `{ message, email? }` → `201` / `400` / `429`   |
 
 All inputs are validated with Zod against an allowlist of station IDs and
 report types.
@@ -143,6 +149,6 @@ Decisions worth knowing about:
 
 - [ ] Per-station weather (monsoon cells are localized; one city-wide reading
       is a v1 simplification)
-- [ ] Line-level rollups and filtering
+- [ ] Line-level severity rollups
 - [ ] Historical patterns ("Andheri floods first, every time")
 - [ ] PWA install + push alerts for a chosen home line

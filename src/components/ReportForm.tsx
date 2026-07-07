@@ -80,7 +80,7 @@ export default function ReportForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="h-fit rounded-2xl border border-hairline bg-surface p-4 shadow-sm sm:p-5 lg:sticky lg:top-4"
+      className="rounded-2xl border border-hairline bg-surface p-4 shadow-sm sm:p-5"
     >
       <h2 className="text-base font-semibold">Report a disruption</h2>
       <p className="mt-1 text-xs text-ink-3">

@@ -5,10 +5,19 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import logo from "../../public/logo.png";
+import FeedbackForm from "@/components/FeedbackForm";
+import FilterBar from "@/components/FilterBar";
+import NewsPanel from "@/components/NewsPanel";
 import ReportForm from "@/components/ReportForm";
 import StationBoard from "@/components/StationBoard";
 import WeatherBanner from "@/components/WeatherBanner";
-import type { ReportsRollup, StationSeverity, WeatherSnapshot } from "@/lib/types";
+import type {
+  LineFilter,
+  ReportsRollup,
+  StationSeverity,
+  TypeFilter,
+  WeatherSnapshot,
+} from "@/lib/types";
 
 // Leaflet reads `window` at import time — load the map in the browser only.
 const StationMap = dynamic(() => import("@/components/StationMap"), {
@@ -33,6 +42,8 @@ export default function Home() {
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const [lineFilter, setLineFilter] = useState<LineFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
   const refreshReports = useCallback(async () => {
     try {
@@ -106,6 +117,13 @@ export default function Home() {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-4">
+            <FilterBar
+              lineFilter={lineFilter}
+              typeFilter={typeFilter}
+              onLineChange={setLineFilter}
+              onTypeChange={setTypeFilter}
+            />
+
             <section className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-x-2 border-b border-hairline px-4 py-3">
                 <h2 className="text-sm font-semibold">Network map</h2>
@@ -118,6 +136,8 @@ export default function Home() {
                   severities={severities}
                   selectedStationId={selectedStationId}
                   onSelect={setSelectedStationId}
+                  lineFilter={lineFilter}
+                  typeFilter={typeFilter}
                 />
               </div>
             </section>
@@ -127,14 +147,20 @@ export default function Home() {
               error={reportsError}
               selectedStationId={selectedStationId}
               onSelect={setSelectedStationId}
+              lineFilter={lineFilter}
+              typeFilter={typeFilter}
             />
           </div>
 
-          <ReportForm
-            stationId={selectedStationId}
-            onStationChange={setSelectedStationId}
-            onReported={() => void refreshReports()}
-          />
+          <div className="min-w-0 space-y-4">
+            <ReportForm
+              stationId={selectedStationId}
+              onStationChange={setSelectedStationId}
+              onReported={() => void refreshReports()}
+            />
+            <FeedbackForm />
+            <NewsPanel />
+          </div>
         </div>
       </main>
 
