@@ -1,22 +1,61 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. Light is the default; dark swaps the same roles via
+ * prefers-color-scheme. Components reference roles through the @theme
+ * mapping below (bg-surface, text-ink-2, border-hairline…) — never raw hex.
+ *
+ * Line colors are CVD-validated per mode (adjacent-pair ΔE ≥ 12, ≥ 3:1
+ * contrast on their surface) — the map picks hex by mode via LINE_META;
+ * CSS surfaces use these vars so they swap automatically.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #eef1f6;
+  --surface: #ffffff;
+  --surface-2: #f4f6fa;
+  --foreground: #101623;
+  --ink-2: #465163;
+  --ink-3: #667184;
+  --hairline: rgba(16, 22, 35, 0.1);
+  --accent: #2563eb;
+  --line-western: #2563eb;
+  --line-central: #dc2626;
+  --line-harbour: #059669;
+  --line-trans-harbour: #7c3aed;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0b0e14;
+    --surface: #141925;
+    --surface-2: #1b2230;
+    --foreground: #f2f5fa;
+    --ink-2: #b3bccb;
+    --ink-3: #8a94a6;
+    --hairline: rgba(255, 255, 255, 0.1);
+    --accent: #60a5fa;
+    --line-western: #3b82f6;
+    --line-central: #ef4444;
+    --line-harbour: #059669;
+    --line-trans-harbour: #8b5cf6;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--hairline);
+  /* accent = mode-aware (focus rings, selection); accent-solid = constant
+     button fill whose white text passes contrast in both modes. */
+  --color-accent: var(--accent);
+  --color-accent-solid: #2563eb;
+  --color-accent-deep: #1e4fc4;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {

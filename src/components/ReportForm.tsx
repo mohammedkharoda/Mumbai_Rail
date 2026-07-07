@@ -24,9 +24,9 @@ type Status =
   | { kind: "error"; message: string };
 
 const inputClasses =
-  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 " +
-  "dark:border-zinc-700 dark:bg-zinc-900";
+  "w-full rounded-xl border border-hairline bg-surface-2 px-3 py-2.5 text-sm " +
+  "text-foreground placeholder:text-ink-3 " +
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export default function ReportForm({
   stationId,
@@ -53,7 +53,10 @@ export default function ReportForm({
       });
       if (res.status === 201) {
         setNote("");
-        setStatus({ kind: "success", message: "Report submitted — thanks for helping fellow commuters." });
+        setStatus({
+          kind: "success",
+          message: "Report submitted — thanks for helping fellow commuters.",
+        });
         onReported();
         return;
       }
@@ -65,7 +68,10 @@ export default function ReportForm({
         });
         return;
       }
-      setStatus({ kind: "error", message: body.error ?? `Something went wrong (HTTP ${res.status}).` });
+      setStatus({
+        kind: "error",
+        message: body.error ?? `Something went wrong (HTTP ${res.status}).`,
+      });
     } catch {
       setStatus({ kind: "error", message: "Network error — are you offline?" });
     }
@@ -74,10 +80,10 @@ export default function ReportForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="h-fit rounded-xl border border-zinc-200 bg-white p-4 lg:sticky lg:top-4 dark:border-zinc-800 dark:bg-zinc-950"
+      className="h-fit rounded-2xl border border-hairline bg-surface p-4 shadow-sm sm:p-5 lg:sticky lg:top-4"
     >
-      <h2 className="font-semibold">Report a disruption</h2>
-      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+      <h2 className="text-base font-semibold">Report a disruption</h2>
+      <p className="mt-1 text-xs text-ink-3">
         One report per station every 2 minutes. Reports fade out after ~6 hours.
       </p>
 
@@ -89,7 +95,7 @@ export default function ReportForm({
         required
         value={stationId ?? ""}
         onChange={(e) => onStationChange(e.target.value || null)}
-        className={`mt-1 ${inputClasses}`}
+        className={`mt-1.5 ${inputClasses}`}
       >
         <option value="" disabled>
           Select a station…
@@ -111,10 +117,10 @@ export default function ReportForm({
           {REPORT_TYPES.map((t) => (
             <label
               key={t}
-              className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm select-none has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-blue-600 ${
+              className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm select-none motion-safe:transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
                 type === t
-                  ? "border-transparent bg-zinc-900 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+                  ? "border-transparent bg-accent-solid font-medium text-white shadow-sm"
+                  : "border-hairline bg-surface-2 text-ink-2 hover:border-ink-3"
               }`}
             >
               <input
@@ -125,6 +131,9 @@ export default function ReportForm({
                 onChange={() => setType(t)}
                 className="sr-only"
               />
+              <span aria-hidden className="mr-1">
+                {REPORT_TYPE_META[t].icon}
+              </span>
               {REPORT_TYPE_META[t].label}
             </label>
           ))}
@@ -132,7 +141,7 @@ export default function ReportForm({
       </fieldset>
 
       <label htmlFor="note" className="mt-4 block text-sm font-medium">
-        Note <span className="font-normal text-zinc-500">(optional)</span>
+        Note <span className="font-normal text-ink-3">(optional)</span>
       </label>
       <textarea
         id="note"
@@ -141,19 +150,19 @@ export default function ReportForm({
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="e.g. Tracks flooded near platform 2, trains held"
-        className={`mt-1 resize-y ${inputClasses}`}
+        className={`mt-1.5 resize-y ${inputClasses}`}
       />
 
       <button
         type="submit"
         disabled={!stationId || status.kind === "sending"}
-        className="mt-4 w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-5 w-full rounded-xl bg-accent-solid px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-accent-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-colors"
       >
         {status.kind === "sending" ? "Submitting…" : "Submit report"}
       </button>
 
       {status.kind === "success" && (
-        <p role="status" className="mt-3 text-sm text-green-700 dark:text-green-400">
+        <p role="status" className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
           {status.message}
         </p>
       )}

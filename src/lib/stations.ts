@@ -1,16 +1,22 @@
 import type { Line, Station } from "./types";
 
 /**
- * Display metadata for the four suburban lines. Colors roughly follow the
- * conventional Mumbai rail-map palette (Western blue, Central red,
- * Harbour green); Trans-Harbour gets purple to stay distinct from the
- * severity colors.
+ * Display metadata for the four suburban lines, roughly following the
+ * conventional Mumbai rail-map palette (Western blue, Central red, Harbour
+ * green, Trans-Harbour purple). Two steps per line: `color` for light
+ * surfaces, `colorDark` for dark ones — Leaflet needs raw hex, so the map
+ * picks by mode. CSS surfaces use `cssVar` (defined in globals.css) and swap
+ * automatically. Both sets pass adjacent-pair CVD separation (ΔE ≥ 12) and
+ * 3:1 contrast on their surface.
  */
-export const LINE_META: Record<Line, { label: string; color: string }> = {
-  western: { label: "Western", color: "#2563eb" },
-  central: { label: "Central", color: "#b91c1c" },
-  harbour: { label: "Harbour", color: "#15803d" },
-  "trans-harbour": { label: "Trans-Harbour", color: "#7c3aed" },
+export const LINE_META: Record<
+  Line,
+  { label: string; color: string; colorDark: string; cssVar: string }
+> = {
+  western: { label: "Western", color: "#2563eb", colorDark: "#3b82f6", cssVar: "var(--line-western)" },
+  central: { label: "Central", color: "#dc2626", colorDark: "#ef4444", cssVar: "var(--line-central)" },
+  harbour: { label: "Harbour", color: "#059669", colorDark: "#059669", cssVar: "var(--line-harbour)" },
+  "trans-harbour": { label: "Trans-Harbour", color: "#7c3aed", colorDark: "#8b5cf6", cssVar: "var(--line-trans-harbour)" },
 };
 
 /**
